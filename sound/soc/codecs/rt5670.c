@@ -469,6 +469,105 @@ static SOC_ENUM_SINGLE_DECL(rt5670_if2_dac_enum, RT5670_DIG_INF1_DATA,
 static SOC_ENUM_SINGLE_DECL(rt5670_if2_adc_enum, RT5670_DIG_INF1_DATA,
 				RT5670_IF2_ADC_SEL_SFT, rt5670_data_select);
 
+static const char * const rt5670_asrc_clk_source[] = {
+	"clk_sysy_div_out", "clk_i2s1_track", "clk_i2s2_track",
+	"clk_i2s3_track", "clk_i2s4_track", "clk_sys2", "clk_sys3",
+	"clk_sys4", "clk_sys5"
+};
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_da_sto_asrc_enum, RT5670_ASRC_2,
+				12, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_da_monol_asrc_enum, RT5670_ASRC_2,
+				8, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_da_monor_asrc_enum, RT5670_ASRC_2,
+				4, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_ad_sto1_asrc_enum, RT5670_ASRC_2,
+				0, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_up_filter_asrc_enum, RT5670_ASRC_3,
+				12, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_down_filter_asrc_enum, RT5670_ASRC_3,
+				8, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_ad_monol_asrc_enum, RT5670_ASRC_3,
+				4, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_ad_monor_asrc_enum, RT5670_ASRC_3,
+				0, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_ad_sto2_asrc_enum, RT5670_ASRC_5,
+				12, rt5670_asrc_clk_source);
+
+static const SOC_ENUM_SINGLE_DECL(rt5670_dsp_asrc_enum, RT5670_DSP_CLK,
+				0, rt5670_asrc_clk_source);
+
+static int rt5670_clk_sel_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	unsigned int u_bit = 0, p_bit = 0;
+	struct soc_enum *em =
+		(struct soc_enum *)kcontrol->private_value;
+
+	switch (em->reg) {
+	case RT5670_ASRC_2:
+		switch (em->shift_l) {
+		case 0:
+			u_bit = 0x8;
+			p_bit = RT5670_PWR_ADC_S1F;
+			break;
+		case 4:
+			u_bit = 0x100;
+			p_bit = RT5670_PWR_DAC_MF_R;
+			break;
+		case 8:
+			u_bit = 0x200;
+			p_bit = RT5670_PWR_DAC_MF_L;
+			break;
+		case 12:
+			u_bit = 0x400;
+			p_bit = RT5670_PWR_DAC_S1F;
+			break;
+		}
+		break;
+	case RT5670_ASRC_3:
+		switch (em->shift_l) {
+		case 0:
+			u_bit = 0x1;
+			p_bit = RT5670_PWR_ADC_MF_R;
+			break;
+		case 4:
+			u_bit = 0x2;
+			p_bit = RT5670_PWR_ADC_MF_L;
+			break;
+		}
+		break;
+	case RT5670_ASRC_5:
+		u_bit = 0x4;
+		p_bit = RT5670_PWR_ADC_S2F;
+		break;
+	}
+
+	if (u_bit || p_bit) {
+		switch (ucontrol->value.integer.value[0]) {
+		case 1 ... 4: /*enable*/
+			if (snd_soc_read(codec, RT5670_PWR_DIG2) & p_bit)
+				snd_soc_update_bits(codec,
+					RT5670_ASRC_1, u_bit, u_bit);
+			break;
+		default: /*disable*/
+			snd_soc_update_bits(codec, RT5670_ASRC_1, u_bit, 0);
+			break;
+		}
+	}
+
+	return snd_soc_put_enum_double(kcontrol, ucontrol);
+}
+
 static const struct snd_kcontrol_new rt5670_snd_controls[] = {
 	/* Headphone Output Volume */
 	SOC_DOUBLE("HP Playback Switch", RT5670_HP_VOL,
@@ -521,6 +620,24 @@ static const struct snd_kcontrol_new rt5670_snd_controls[] = {
 
 	SOC_ENUM("ADC IF2 Data Switch", rt5670_if2_adc_enum),
 	SOC_ENUM("DAC IF2 Data Switch", rt5670_if2_dac_enum),
+
+	SOC_ENUM_EXT("DA STO Clk Sel", rt5670_da_sto_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM_EXT("DA MONOL Clk Sel", rt5670_da_monol_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM_EXT("DA MONOR Clk Sel", rt5670_da_monor_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM_EXT("AD STO1 Clk Sel", rt5670_ad_sto1_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM_EXT("AD MONOL Clk Sel", rt5670_ad_monol_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM_EXT("AD MONOR Clk Sel", rt5670_ad_monor_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM("UP Clk Sel", rt5670_up_filter_asrc_enum),
+	SOC_ENUM("DOWN Clk Sel", rt5670_down_filter_asrc_enum),
+	SOC_ENUM_EXT("AD STO2 Clk Sel", rt5670_ad_sto2_asrc_enum,
+		     snd_soc_get_enum_double, rt5670_clk_sel_put),
+	SOC_ENUM("DSP Clk Sel", rt5670_dsp_asrc_enum),
 };
 
 /**
